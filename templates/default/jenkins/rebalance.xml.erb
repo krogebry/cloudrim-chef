@@ -1,0 +1,165 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Use berkshelf to deploy cookbooks.</description>
+  <logRotator class="hudson.tasks.LogRotator">
+    <daysToKeep>5</daysToKeep>
+    <numToKeep>250</numToKeep>
+    <artifactDaysToKeep>-1</artifactDaysToKeep>
+    <artifactNumToKeep>-1</artifactNumToKeep>
+  </logRotator>
+  <keepDependencies>false</keepDependencies>
+
+  <properties>
+    <hudson.plugins.googlecode.GoogleCodeProjectProperty plugin="googlecode@1.7"/>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>Version</name>
+          <description>Version number to deploy.</description>
+          <defaultValue>0.0.8</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>NumKaijuEngines</name>
+          <description>Number of kaiju engines to run.</description>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>1</string>
+              <string>3</string>
+              <string>5</string>
+              <string>10</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+
+        <hudson.model.ChoiceParameterDefinition>
+          <name>NumJaegerEngines</name>
+          <description>Number of Jaeger engines to run.</description>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>1</string>
+              <string>3</string>
+              <string>5</string>
+              <string>10</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+
+        <hudson.model.ChoiceParameterDefinition>
+          <name>NumScoreboardEngines</name>
+          <description>Number of Scoreboard engines to run.</description>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>1</string>
+              <string>3</string>
+              <string>5</string>
+              <string>10</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+
+
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <EnvInjectBuilder plugin="envinject@1.88">
+      <info>
+        <propertiesContent>
+CHEF_URL=https://<%= @hostname %>.<%= @region_name %>.<%= @domain_name %>
+CHEF_KEYNAME=jenkins-<%= @region_name %>-<%= @domain_name %>.pem
+CHEF_NODENAME=jenkins
+        </propertiesContent>
+      </info>
+    </EnvInjectBuilder>
+    <hudson.plugins.ruby.Ruby plugin="ruby@1.2">
+      <command>
+require 'rubygems'
+require 'pp'
+require 'uri'
+require 'json'
+require 'net/http'
+
+numKaijuEngines = ENV['NumKaijuEngines'].to_i
+numJaegerEngines = ENV['NumJaegerEngines'].to_i
+numScoreboardEngines = ENV['NumScoreboardEngines'].to_i
+
+cmd = "knife search node \"run_list:role\\\[mongodb-shard-client\\\]\" -a name|grep name|awk '{print $2}'"
+puts "CMD: %s" % cmd
+nodes = `#{cmd}`.split()
+nodes.sort!
+pp nodes
+
+puts "NumKaiju: %i" % numKaijuEngines
+puts "NumJaeger: %i" % numJaegerEngines
+puts "NumScoreboard: %i" % numScoreboardEngines
+
+def update_node( json )
+  now = Time.new.to_f()
+  fs_tmp = "/tmp/opsauto-%.2f.json" % now
+  out = File.open( fs_tmp, "w" )
+  out.puts( json.to_json )
+  out.close()
+  knife_cmd = "knife node from file %s" % fs_tmp
+  system( knife_cmd )
+  system( "unlink %s" % fs_tmp )
+end
+
+update_nodes = {}
+
+nodes.each do |node_name|
+  knife_cmd = "knife node show %s --format json" % node_name
+  json = JSON::parse(`#{knife_cmd}`)
+  json["normal"]["htc"]["services"] = [ "api" ] 
+  update_nodes[node_name] = json
+end
+
+nodes[0,numKaijuEngines].each do |node_name|
+  puts "Node: %s" % node_name
+  update_nodes[node_name]["normal"]["htc"]["services"].push( "kaiju" )
+end
+
+nodes[0,numJaegerEngines].each do |node_name|
+  puts "Node: %s" % node_name
+  update_nodes[node_name]["normal"]["htc"]["services"].push( "jaeger" )
+end
+
+nodes[0,numScoreboardEngines].each do |node_name|
+  puts "Node: %s" % node_name
+  update_nodes[node_name]["normal"]["htc"]["services"].push( "scoreboard" )
+end
+
+update_nodes.each do |node_name, node_json|
+  puts "Updating: %s" % node_name
+  update_node( node_json )
+  puts "Done updating: %s" % node_name
+end
+      </command>
+    </hudson.plugins.ruby.Ruby>
+  </builders>
+
+  <% if(@publish_to == nil) %>
+  <publishers/>
+  <% else %>
+  <publishers>
+    <hudson.tasks.BuildTrigger>
+      <childProjects><%= @publish_to %></childProjects>
+      <threshold>
+        <name>SUCCESS</name>
+        <ordinal>0</ordinal>
+        <color>BLUE</color>
+        <completeBuild>true</completeBuild>
+      </threshold>
+    </hudson.tasks.BuildTrigger>
+  </publishers>
+  <% end %>
+
+  <buildWrappers/>
+</project>
