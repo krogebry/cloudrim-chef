@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Use berkshelf to deploy cookbooks.</description>
+  <logRotator class="hudson.tasks.LogRotator">
+    <daysToKeep>5</daysToKeep>
+    <numToKeep>250</numToKeep>
+    <artifactDaysToKeep>-1</artifactDaysToKeep>
+    <artifactNumToKeep>-1</artifactNumToKeep>
+  </logRotator>
+  <keepDependencies>false</keepDependencies>
+
+  <properties>
+    <hudson.plugins.googlecode.GoogleCodeProjectProperty plugin="googlecode@1.7"/>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>Version</name>
+          <description>Version number to deploy.</description>
+          <defaultValue>0.0.13</defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.plugins.ruby.Ruby plugin="ruby@1.2">
+      <command>
+require 'rubygems'
+require 'pp'
+require 'uri'
+require 'json'
+require 'net/http'
+
+hosts = []
+<% if(@stacks == nil) %>
+  hosts_file = "<%= @deployment_name %>_hosts" 
+  if(!File.exists?( hosts_file ))
+    system( "htc deployment instance <%= @deployment_name %>|awk '{print $2}' |grep '10.0' &gt; <%= @deployment_name %>_hosts" )
+  end
+  hosts.push(File.read( hosts_file ).split)
+<% else %>
+  stacks = [<%= @stacks.map{|s| "'%s'" % s }.join( "," ) %>]
+  stacks.each do |stack_name|
+    hosts_file = "<%= @deployment_name %>_%s_hosts" % stack_name
+    if(!File.exists?( "%s_hosts" % stack_name ))
+      system( "htc stack instance <%= @deployment_name %> %s |awk '{print $2}' |grep '10.0' &gt; %s" % [stack_name, hosts_file] )
+    end
+    hosts.push(File.read( hosts_file ).split)
+  end
+<% end %>
+
+system( "ssh <%= @hostname %>.<%= @region_name  %>.<%= @domain_name %> \"pssh -H '%s' \"/home/ec2-user/deploy ${Version}\"\"" % hosts.join( " " ))
+      </command>
+    </hudson.plugins.ruby.Ruby>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

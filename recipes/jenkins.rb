@@ -6,9 +6,9 @@
 #
 # AUTOMATE ALL THE THINGS!!
 
-link "/usr/bin/htc" do
-  to "/opt/rbenv/versions/2.0.0-p0/bin/htc"
-end
+#link "/usr/bin/htc" do
+  #to "/opt/rbenv/versions/2.0.0-p0/bin/htc"
+#end
 
 pipelines = []
 dashboards = []
@@ -26,22 +26,23 @@ require "htmlentities"
 
 region_name = "us-east-1"
 domain_name = "opsautohtc.net"
+deployment_name = "Sanaki"
 pipelines.push({
   :name => "Launch us-east-1",
   :num_builds => 3,
   :description => "<h1>Prism</h1><ul><li>Cloud: AWS</li><li>Region: us-east-1</li><li>Account: HTC CS DEV</li><li>Owner: Bryan Kroger ( bryan_kroger@htc.com )</li></ul>",
   :refresh_freq => 3,
-  :first_job_name => "CloudFormation.prism-vpc.us-east-1.opsautohtc.net",
-  :build_view_title => "Launch us-east-1"
+  :first_job_name => "CloudFormation.%s.%s.%s" % [deployment_name, region_name, domain_name],
+  :build_view_title => "Launch %s" % deployment_name
 })
-cloudrim_battle_theater "Tanaki" do
+cloudrim_battle_theater deployment_name do
   action :jenkins_cloud_formation
   az_name "us-east-1b"
   git_url "git@gitlab.dev.sea1.csh.tc:operations/deployments.git"
   region_name region_name
   domain_name domain_name
 end
-cloudrim_battle_theater "Tanaki" do
+cloudrim_battle_theater deployment_name do
   action :jenkins_exec_helpers
   az_name "us-east-1b"
   git_url "git@gitlab.dev.sea1.csh.tc:operations/deployments.git"

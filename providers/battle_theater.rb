@@ -66,8 +66,7 @@ def action_jenkins_exec_helpers()
   template job_config do
     owner "jenkins"
     group "jenkins"
-    source "jenkins/htc_pssh_cmd.xml.erb"
-    cookbook "opsauto"
+    source "jenkins/deploy.xml.erb"
     variables({
       :cmd => "/home/ec2-user/deploy 0.0.8",
       :stacks => [ "clients" ],
